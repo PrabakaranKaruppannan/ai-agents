@@ -1,59 +1,27 @@
 import asyncio
 import os
 import random
-import shutil
 import sys
-from pathlib import Path
 
 import dotenv
 from agent_framework import tool
 from agent_framework.openai import OpenAIChatClient
-from azure.identity import AzureCliCredential
 
 # Avoid Windows console UnicodeEncodeError when streaming responses.
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
-
-def ensure_azure_cli_on_path() -> None:
-    """AzureCliCredential needs `az` on PATH. Fresh installs often aren't visible in Git Bash."""
-    if shutil.which("az"):
-        return
-
-    candidates = [
-        Path(os.environ.get("ProgramFiles", r"C:\Program Files"))
-        / "Microsoft SDKs"
-        / "Azure"
-        / "CLI2"
-        / "wbin",
-        Path(os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)"))
-        / "Microsoft SDKs"
-        / "Azure"
-        / "CLI2"
-        / "wbin",
-    ]
-    for folder in candidates:
-        if (folder / "az.cmd").exists() or (folder / "az.exe").exists():
-            os.environ["PATH"] = str(folder) + os.pathsep + os.environ.get("PATH", "")
-            return
-
-    raise RuntimeError(
-        "Azure CLI was not found on PATH. Install it, then restart the terminal, "
-        "or add this folder to PATH: "
-        r"C:\Program Files\Microsoft SDKs\Azure\CLI2\wbin"
-    )
-
-
 dotenv.load_dotenv(dotenv.find_dotenv())
-ensure_azure_cli_on_path()
 
 endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
 deployment = os.getenv("AZURE_OPENAI_DEPLOYMENT")
+api_key = os.getenv("AZURE_OPENAI_API_KEY")
 
-if not endpoint or not deployment:
+if not endpoint or not deployment or not api_key:
     raise ValueError(
         "Missing required environment variables. "
-        "Please set AZURE_OPENAI_ENDPOINT and AZURE_OPENAI_DEPLOYMENT in your .env file."
+        "Please set AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_DEPLOYMENT, "
+        "and AZURE_OPENAI_API_KEY in your .env file."
     )
 
 # A list of vacation destinations the tool can choose from.
@@ -87,11 +55,10 @@ def get_random_destination() -> str:
 
 
 # OpenAIChatClient targets Azure OpenAI's v1 endpoint and uses the Responses API.
-# Sign in with `az login` first so AzureCliCredential can authenticate.
 chat_client = OpenAIChatClient(
     model=deployment,
     azure_endpoint=endpoint,
-    credential=AzureCliCredential(),
+    api_key=api_key,
 )
 
 agent = chat_client.as_agent(
